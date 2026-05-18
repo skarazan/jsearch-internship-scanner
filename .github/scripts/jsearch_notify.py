@@ -20,6 +20,25 @@ QUERIES = [
     ("data science intern in new york OR remote USA", RAPIDAPI_KEY_2),
 ]
 
+TRUSTED_DOMAINS = (
+    "linkedin.com", "indeed.com", "glassdoor.com", "ziprecruiter.com",
+    "lever.co", "greenhouse.io", "workday.com", "myworkdayjobs.com",
+    "smartrecruiters.com", "icims.com", "taleo.net", "ultipro.com",
+    "jobvite.com", "ashbyhq.com", "applytojob.com", "breezy.hr",
+    "careers-page.com", "jobs.lever.co", "boards.greenhouse.io",
+    "google.com", "amazon.jobs", "apple.com", "microsoft.com",
+    "meta.com", "netflix.jobs", "careers.google.com",
+)
+
+def is_trusted_url(url):
+    if not url:
+        return False
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+        return any(host == d or host.endswith("." + d) for d in TRUSTED_DOMAINS)
+    except Exception:
+        return False
+
 def job_hash(company, title):
     key = f"{company.lower().strip()}|{title.lower().strip()}"
     return hashlib.md5(key.encode()).hexdigest()[:12]
@@ -96,6 +115,8 @@ for q, api_key in QUERIES:
             if is_phd(title):
                 continue
             if not is_nyc_or_remote(job):
+                continue
+            if not is_trusted_url(job.get("job_apply_link", "")):
                 continue
             h = job_hash(company, title)
             if h in all_known:
