@@ -1,0 +1,48 @@
+name: JSearch LinkedIn/Indeed scan
+
+on:
+  schedule:
+    # Mon-Fri, every hour from 12:00-21:00 UTC (8am-5pm EDT)
+    # 1 req per key per run × 10 runs/day × 22 workdays ≈ 220/month per key
+    - cron: '0 12-21 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Search and filter
+        id: jsearch
+        env:
+          RAPIDAPI_KEY_1: ${{ secrets.RAPIDAPI_KEY_1 }}
+          RAPIDAPI_KEY_2: ${{ secrets.RAPIDAPI_KEY_2 }}
+        run: python3 .github/scripts/jsearch_notify.py
+
+      - name: Commit notified hashes
+        if: steps.jsearch.outputs.has_jsearch == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/data/notified_hashes.json
+          git commit -m "Update notified hashes"
+          git push
+
+      - name: Notify Discord
+        if: steps.jsearch.outputs.has_jsearch == 'true'
+        run: |
+          MESSAGE=$(cat .github/data/discord_message.txt)
+          if [ ${#MESSAGE} -gt 1990 ]; then
+            MESSAGE="${MESSAGE:0:1990}..."
+          fi
+          jq -n --arg content "$MESSAGE" '{"content": $content}' | \
+            curl -s -H "Content-Type: application/json" \
+              -d @- \
+              "${{ secrets.DISCORD_WEBHOOK_URL }}"
