@@ -30,6 +30,23 @@ TRUSTED_DOMAINS = (
     "meta.com", "netflix.jobs", "careers.google.com",
 )
 
+def build_chunks(lines, header="@everyone", limit=1900):
+    """Pack listing blocks into Discord-sized messages without splitting a listing."""
+    chunks = []
+    current = header
+    for line in lines:
+        block = line if len(line) <= limit else line[:limit - 1] + "…"
+        candidate = f"{current}\n\n{block}" if current else block
+        if len(candidate) > limit:
+            chunks.append(current)
+            current = block
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def is_trusted_url(url):
     if not url:
         return False
@@ -135,9 +152,8 @@ if all_jobs:
     with open(NOTIFIED_PATH, "w") as f:
         json.dump(sorted(notified), f)
 
-    MAX_SHOW = 5
     lines = []
-    for job in all_jobs[:MAX_SHOW]:
+    for job in all_jobs:
         company = job["employer_name"]
         title = job["job_title"]
         city = job.get("job_city", "")
@@ -147,12 +163,10 @@ if all_jobs:
             loc = f"{loc} (Remote)" if loc else "Remote"
         url = job.get("job_apply_link", "")
         lines.append(f"🆕 **{company}** — {title}\n📍 {loc}\n🔗 <{url}>")
-    extra = len(all_jobs) - len(lines)
-    if extra > 0:
-        lines.append(f"...and **{extra} more** — check the README")
-    message = "@everyone\n\n" + "\n\n".join(lines)
-    with open(".github/data/discord_message.txt", "w") as f:
-        f.write(message)
+    chunks = build_chunks(lines)
+    print(f"Posting {len(lines)} listings across {len(chunks)} Discord message(s)")
+    with open(".github/data/discord_chunks.json", "w") as f:
+        json.dump(chunks, f)
     with open(output_file, "a") as f:
         f.write("has_jsearch=true\n")
 else:

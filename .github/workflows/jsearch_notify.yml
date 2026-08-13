@@ -26,6 +26,21 @@ jobs:
           RAPIDAPI_KEY_2: ${{ secrets.RAPIDAPI_KEY_2 }}
         run: python3 .github/scripts/jsearch_notify.py
 
+      # Runs before the commit: if Discord is down, the notified hashes are not
+      # persisted, so the listings are retried on the next run instead of being
+      # silently marked as sent.
+      - name: Notify Discord
+        if: steps.jsearch.outputs.has_jsearch == 'true'
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          jq -c '.[]' .github/data/discord_chunks.json | while read -r chunk; do
+            jq -n --argjson content "$chunk" '{"content": $content}' | \
+              curl -sS --fail-with-body -H "Content-Type: application/json" \
+                -d @- "$DISCORD_WEBHOOK_URL"
+            sleep 1
+          done
+
       - name: Commit notified hashes
         if: steps.jsearch.outputs.has_jsearch == 'true'
         run: |
@@ -34,15 +49,3 @@ jobs:
           git add .github/data/notified_hashes.json
           git commit -m "Update notified hashes"
           git push
-
-      - name: Notify Discord
-        if: steps.jsearch.outputs.has_jsearch == 'true'
-        run: |
-          MESSAGE=$(cat .github/data/discord_message.txt)
-          if [ ${#MESSAGE} -gt 1990 ]; then
-            MESSAGE="${MESSAGE:0:1990}..."
-          fi
-          jq -n --arg content "$MESSAGE" '{"content": $content}' | \
-            curl -s -H "Content-Type: application/json" \
-              -d @- \
-              "${{ secrets.DISCORD_WEBHOOK_URL }}"
